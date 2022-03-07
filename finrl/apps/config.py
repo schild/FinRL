@@ -10,11 +10,6 @@
 # TURBULENCE_DATA = "data/dow30_turbulence_index.csv"
 # TESTING_DATA_FILE = "test.csv"
 
-# now = datetime.datetime.now()
-DATA_SAVE_DIR = "datasets"
-TRAINED_MODEL_DIR = "trained_models"
-TENSORBOARD_LOG_DIR = "tensorboard_log"
-RESULTS_DIR = "results"
 
 ## time_fmt = '%Y-%m-%d'
 START_DATE = "2009-01-01"
@@ -26,7 +21,9 @@ TRAIN_END_DATE = "2020-07-31"
 TEST_START_DATE = "2020-08-01"
 TEST_END_DATE = "2021-10-01"
 
-TRADE_START_DATE = "2019-01-01"
+TRADE_START_DATE = "2021-11-01"
+TRADE_END_DATE = "2022-03-01"
+
 
 ## dataset default columns
 DEFAULT_DATA_COLUMNS = ["date", "tic", "close"]
@@ -44,6 +41,12 @@ TECHNICAL_INDICATORS_LIST = [
     "close_60_sma",
 ]
 # TECHNICAL_INDICATORS_LIST = ["macd","rsi_30", "cci_30", "dx_30"]
+
+# now = datetime.datetime.now()
+DATA_SAVE_DIR = "datasets"
+TRAINED_MODEL_DIR = "trained_models"
+TENSORBOARD_LOG_DIR = "tensorboard_log"
+RESULTS_DIR = "results"
 
 
 ## Model Parameters
