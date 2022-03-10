@@ -34,11 +34,7 @@ class WrdsProcessor:
             df = nyse.sessions_in_range(
                 pd.Timestamp(start, tz=pytz.UTC), pd.Timestamp(end, tz=pytz.UTC)
             )
-            trading_days = []
-            for day in df:
-                trading_days.append(str(day)[:10])
-
-            return trading_days
+            return [str(day)[:10] for day in df]
 
         def data_fetch_wrds(date="2021-05-01", stock_set=("AAPL"), time_interval=60):
             # start_date, end_date should be in the same year
@@ -106,10 +102,10 @@ class WrdsProcessor:
             tic = tic_list[i]
             time_list = []
             temp_df = df[df["sym_root"] == tic]
-            for i in range(0, temp_df.shape[0]):
+            for i in range(temp_df.shape[0]):
                 date = temp_df["date"].iloc[i]
                 time_m = temp_df["time_m"].iloc[i]
-                time = str(date) + " " + str(time_m)
+                time = f'{str(date)} {str(time_m)}'
                 try:
                     time = datetime.datetime.strptime(time, "%Y-%m-%d %H:%M:%S.%f")
                 except BaseException:
@@ -145,9 +141,7 @@ class WrdsProcessor:
         df = df.sort_values(by=["tic", "time"])
 
         # check missing rows
-        tic_dic = {}
-        for tic in tic_list:
-            tic_dic[tic] = [0, 0]
+        tic_dic = {tic: [0, 0] for tic in tic_list}
         ary = df.values
         for i in range(ary.shape[0]):
             row = ary[i]
@@ -157,20 +151,14 @@ class WrdsProcessor:
                 tic_dic[tic][0] += 1
             tic_dic[tic][1] += 1
         constant = np.unique(df["time"].values).shape[0]
-        nan_tics = []
-        for tic in tic_dic:
-            if tic_dic[tic][1] != constant:
-                nan_tics.append(tic)
+        nan_tics = [tic for tic, value in tic_dic.items() if value[1] != constant]
         # fill missing rows
         normal_time = np.unique(df["time"].values)
 
         df2 = df.copy()
         for tic in nan_tics:
             tic_time = df[df["tic"] == tic]["time"].values
-            missing_time = []
-            for i in normal_time:
-                if i not in tic_time:
-                    missing_time.append(i)
+            missing_time = [i for i in normal_time if i not in tic_time]
             for time in missing_time:
                 temp_df = pd.DataFrame(
                     [[time, np.nan, np.nan, np.nan, np.nan, 0, tic]],
@@ -263,19 +251,15 @@ class WrdsProcessor:
             ].dropna(axis=1)
 
             cov_temp = filtered_hist_price.cov()
-            current_temp = current_price[[x for x in filtered_hist_price]] - np.mean(
+            current_temp = (current_price[list(filtered_hist_price)] - np.mean(
                 filtered_hist_price, axis=0
-            )
+            ))
             temp = current_temp.values.dot(np.linalg.pinv(cov_temp)).dot(
                 current_temp.values.T
             )
             if temp > 0:
                 count += 1
-                if count > 2:
-                    turbulence_temp = temp[0][0]
-                else:
-                    # avoid large outlier because of the calculation just begins
-                    turbulence_temp = 0
+                turbulence_temp = temp[0][0] if count > 2 else 0
             else:
                 turbulence_temp = 0
             turbulence_index.append(turbulence_temp)

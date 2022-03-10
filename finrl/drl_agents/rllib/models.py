@@ -99,7 +99,7 @@ class DRLAgent:
         ray.shutdown()
 
         # save the trained model
-        cwd = "./test_" + str(model_name)
+        cwd = f"./test_{str(model_name)}"
         trainer.save(cwd)
 
         return trainer
@@ -173,6 +173,6 @@ class DRLAgent:
             episode_return = total_asset / env_instance.initial_total_asset
             episode_returns.append(episode_return)
         ray.shutdown()
-        print("episode return: " + str(episode_return))
+        print(f"episode return: {str(episode_return)}")
         print("Test Finished!")
         return episode_total_assets

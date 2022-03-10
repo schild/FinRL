@@ -66,7 +66,7 @@ class BitcoinEnv:  # custom env
             self.day_tech[5] * 2 ** -15,
             self.day_tech[6] * 2 ** -15,
         ]
-        state = np.hstack(
+        return np.hstack(
             (
                 self.account * 2 ** -18,
                 self.day_price * 2 ** -15,
@@ -74,7 +74,6 @@ class BitcoinEnv:  # custom env
                 self.stocks * 2 ** -4,
             )
         ).astype(np.float32)
-        return state
 
     def step(self, action) -> (np.ndarray, float, bool, None):
         stock_action = action[0]
@@ -140,9 +139,8 @@ class BitcoinEnv:  # custom env
         device = agent.device
 
         state = self.reset()
-        episode_returns = list()
-        episode_returns.append(1)
-        btc_returns = list()  # the cumulative_return / initial_account
+        episode_returns = [1]
+        btc_returns = []
         with _torch.no_grad():
             for i in range(self.max_step):
                 if i == 0:

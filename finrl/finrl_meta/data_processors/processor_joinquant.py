@@ -15,14 +15,13 @@ class JoinQuantEngineer:
         jq.auth(username, password)
 
     def data_fetch(self, stock_list, num, unit, end_dt):
-        df = jq.get_bars(
+        return jq.get_bars(
             security=stock_list,
             count=num,
             unit=unit,
             fields=["date", "open", "high", "low", "close", "volume"],
             end_dt=end_dt,
         )
-        return df
 
     def preprocess(df, stock_list):
         n = len(stock_list)
@@ -41,8 +40,7 @@ class JoinQuantEngineer:
     # output: list of str_of_trade_day, e.g., ['2021-09-01', '2021-09-02']
     def calc_trade_days_by_joinquant(self, start_day, end_day):
         dates = jq.get_trade_days(start_day, end_day)
-        str_dates = [date2str(dt) for dt in dates]
-        return str_dates
+        return [date2str(dt) for dt in dates]
 
     # start_day: str
     # end_day: str
@@ -68,10 +66,7 @@ class JoinQuantEngineer:
         self, stocknames, start_day, end_day, read_data_from_local, path_of_data
     ):
         assert read_data_from_local in [0, 1]
-        if read_data_from_local == 1:
-            remove = 0
-        else:
-            remove = 1
+        remove = 0 if read_data_from_local == 1 else 1
         remove_all_files(remove, path_of_data)
         dfs = []
         if read_data_from_local == 1:

@@ -55,7 +55,7 @@ def test(
 
     # load elegantrl needs state dim, action dim and net dim
     net_dimension = kwargs.get("net_dimension", 2 ** 7)
-    cwd = kwargs.get("cwd", "./" + str(model_name))
+    cwd = kwargs.get("cwd", f"./{str(model_name)}")
     print("price_array: ", len(price_array))
 
     if drl_lib == "elegantrl":

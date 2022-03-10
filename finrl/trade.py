@@ -16,7 +16,7 @@ def trade(start_date, end_date, ticker_list, data_source, time_interval,
         # read parameters
         try:
             net_dim = kwargs.get("net_dimension", 2 ** 7)  # dimension of NNs
-            cwd = kwargs.get("cwd", "./" + str(model_name))  # current working directory
+            cwd = kwargs.get("cwd", f"./{str(model_name)}")
             state_dim = kwargs.get("state_dim")  # dimension of state/observations space
             action_dim = kwargs.get("action_dim")  # dimension of action space
         except:

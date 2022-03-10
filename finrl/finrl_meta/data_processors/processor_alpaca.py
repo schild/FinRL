@@ -59,10 +59,10 @@ class AlpacaProcessor:
         trading_days = self.get_trading_days(start=self.start, end=self.end)
         #produce full time index
         times = []
+        NY = "America/New_York"
         for day in trading_days:
-            NY = "America/New_York"
             current_time = pd.Timestamp(day + " 09:30:00").tz_localize(NY)
-            for i in range(390):
+            for _ in range(390):
                 times.append(current_time)
                 current_time += pd.Timedelta(minutes=1)
         #create a new dataframe with full time series
@@ -76,7 +76,7 @@ class AlpacaProcessor:
                 tmp_df.loc[tic_df.iloc[i]["time"]] = tic_df.iloc[i][
                     ["open", "high", "low", "close", "volume"]
                 ]
-            
+
             #if the close price of the first row is NaN
             if str(tmp_df.iloc[0]["close"]) == "nan":
                print('The price of the first row for ticker ', tic, ' is NaN. ', 
@@ -94,7 +94,7 @@ class AlpacaProcessor:
             if str(tmp_df.iloc[0]["close"]) == "nan":
                 print('Missing data for ticker: ', tic, ' . The prices are all NaN. Fill with 0.')
                 tmp_df.iloc[0] = [0.0, 0.0, 0.0, 0.0, 0.0,]
-                      
+
             #forward filling row by row
             for i in range(tmp_df.shape[0]):
                 if str(tmp_df.iloc[i]["close"]) == "nan":
@@ -196,19 +196,15 @@ class AlpacaProcessor:
             ].dropna(axis=1)
 
             cov_temp = filtered_hist_price.cov()
-            current_temp = current_price[[x for x in filtered_hist_price]] - np.mean(
+            current_temp = (current_price[list(filtered_hist_price)] - np.mean(
                 filtered_hist_price, axis=0
-            )
+            ))
             temp = current_temp.values.dot(np.linalg.pinv(cov_temp)).dot(
                 current_temp.values.T
             )
             if temp > 0:
                 count += 1
-                if count > 2:
-                    turbulence_temp = temp[0][0]
-                else:
-                    # avoid large outlier because of the calculation just begins
-                    turbulence_temp = 0
+                turbulence_temp = temp[0][0] if count > 2 else 0
             else:
                 turbulence_temp = 0
             turbulence_index.append(turbulence_temp)
@@ -258,11 +254,7 @@ class AlpacaProcessor:
         df = nyse.sessions_in_range(
             pd.Timestamp(start, tz=pytz.UTC), pd.Timestamp(end, tz=pytz.UTC)
         )
-        trading_days = []
-        for day in df:
-            trading_days.append(str(day)[:10])
-
-        return trading_days
+        return [str(day)[:10] for day in df]
 
     def fetch_latest_data(
         self, ticker_list, time_interval, tech_indicator_list, limit=100

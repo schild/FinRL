@@ -14,10 +14,9 @@ class CCXTEngineer:
     def data_fetch(self, start, end, pair_list=["BTC/USDT"], period="1m"):
         def min_ohlcv(dt, pair, limit):
             since = calendar.timegm(dt.utctimetuple()) * 1000
-            ohlcv = self.binance.fetch_ohlcv(
+            return self.binance.fetch_ohlcv(
                 symbol=pair, timeframe="1m", since=since, limit=limit
             )
-            return ohlcv
 
         def ohlcv(dt, pair, period="1d"):
             ohlcv = []

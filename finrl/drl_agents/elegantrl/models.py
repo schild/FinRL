@@ -100,7 +100,7 @@ class DRLAgent:
         episode_returns = []  # the cumulative_return / initial_account
         episode_total_assets = [environment.initial_total_asset]
         with _torch.no_grad():
-            for i in range(environment.max_step):
+            for _ in range(environment.max_step):
                 s_tensor = _torch.as_tensor((state,), device=device)
                 a_tensor = act(s_tensor)  # action_tanh = act.forward()
                 action = (

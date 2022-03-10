@@ -95,10 +95,10 @@ class YahooFinanceProcessor:
             times = trading_days
         elif time_interval == "1Min":
             times = []
+            NY = "America/New_York"
             for day in trading_days:
-                NY = "America/New_York"
                 current_time = pd.Timestamp(day + " 09:30:00").tz_localize(NY)
-                for i in range(390):
+                for _ in range(390):
                     times.append(current_time)
                     current_time += pd.Timedelta(minutes=1)
         else:
@@ -243,9 +243,9 @@ class YahooFinanceProcessor:
             ].dropna(axis=1)
 
             cov_temp = filtered_hist_price.cov()
-            current_temp = current_price[[x for x in filtered_hist_price]] - np.mean(
+            current_temp = (current_price[list(filtered_hist_price)] - np.mean(
                 filtered_hist_price, axis=0
-            )
+            ))
             # cov_temp = hist_price.cov()
             # current_temp=(current_price - np.mean(hist_price,axis=0))
 
@@ -254,11 +254,7 @@ class YahooFinanceProcessor:
             )
             if temp > 0:
                 count += 1
-                if count > 2:
-                    turbulence_temp = temp[0][0]
-                else:
-                    # avoid large outlier because of the calculation just begins
-                    turbulence_temp = 0
+                turbulence_temp = temp[0][0] if count > 2 else 0
             else:
                 turbulence_temp = 0
             turbulence_index.append(turbulence_temp)
@@ -321,8 +317,4 @@ class YahooFinanceProcessor:
         df = nyse.sessions_in_range(
             pd.Timestamp(start, tz=pytz.UTC), pd.Timestamp(end, tz=pytz.UTC)
         )
-        trading_days = []
-        for day in df:
-            trading_days.append(str(day)[:10])
-
-        return trading_days
+        return [str(day)[:10] for day in df]
