@@ -33,7 +33,7 @@ def train(
     env_instance = env(config=env_config)
 
     # read parameters
-    cwd = kwargs.get("cwd", "./" + str(model_name))
+    cwd = kwargs.get("cwd", f"./{str(model_name)}")
 
     if drl_lib == "elegantrl":
         from finrl.drl_agents.elegantrl.models import DRLAgent as DRLAgent_erl
@@ -90,7 +90,7 @@ def train(
         )
         print("Training finished!")
         trained_model.save(cwd)
-        print("Trained model saved in " + str(cwd))
+        print(f"Trained model saved in {str(cwd)}")
     else:
         raise ValueError("DRL library input is NOT supported. Please check.")
 

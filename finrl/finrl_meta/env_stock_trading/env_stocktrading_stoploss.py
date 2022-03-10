@@ -164,17 +164,16 @@ class StockTradingEnvStopLoss(gym.Env):
     def get_date_vector(self, date, cols=None):
         if (cols is None) and (self.cached_data is not None):
             return self.cached_data[date]
-        else:
-            date = self.dates[date]
-            if cols is None:
-                cols = self.daily_information_cols
-            trunc_df = self.df.loc[[date]]
-            v = []
-            for a in self.assets:
-                subset = trunc_df[trunc_df[self.stock_col] == a]
-                v += subset.loc[date, cols].tolist()
-            assert len(v) == len(self.assets) * len(cols)
-            return v
+        date = self.dates[date]
+        if cols is None:
+            cols = self.daily_information_cols
+        trunc_df = self.df.loc[[date]]
+        v = []
+        for a in self.assets:
+            subset = trunc_df[trunc_df[self.stock_col] == a]
+            v += subset.loc[date, cols].tolist()
+        assert len(v) == len(self.assets) * len(cols)
+        return v
 
     def return_terminal(self, reason="Last Date", reward=0):
         state = self.state_memory[-1]
@@ -252,39 +251,38 @@ class StockTradingEnvStopLoss(gym.Env):
     def get_reward(self):
         if self.current_step == 0:
             return 0
+        total_assets = self.account_information["total_assets"][-1]
+        cash = self.account_information["cash"][-1]
+        holdings = self.state_memory[-1][1 : len(self.assets) + 1]
+        neg_closing_diff_avg_buy = np.clip(self.closing_diff_avg_buy, -np.inf, 0)
+        neg_profit_sell_diff_avg_buy = np.clip(
+            self.profit_sell_diff_avg_buy, -np.inf, 0
+        )
+        pos_profit_sell_diff_avg_buy = np.clip(
+            self.profit_sell_diff_avg_buy, 0, np.inf
+        )
+
+        cash_penalty = max(0, (total_assets * self.cash_penalty_proportion - cash))
+        if self.current_step > 1:
+            prev_holdings = self.state_memory[-2][1 : len(self.assets) + 1]
+            stop_loss_penalty = -1 * np.dot(
+                np.array(prev_holdings), neg_closing_diff_avg_buy
+            )
         else:
-            total_assets = self.account_information["total_assets"][-1]
-            cash = self.account_information["cash"][-1]
-            holdings = self.state_memory[-1][1 : len(self.assets) + 1]
-            neg_closing_diff_avg_buy = np.clip(self.closing_diff_avg_buy, -np.inf, 0)
-            neg_profit_sell_diff_avg_buy = np.clip(
-                self.profit_sell_diff_avg_buy, -np.inf, 0
-            )
-            pos_profit_sell_diff_avg_buy = np.clip(
-                self.profit_sell_diff_avg_buy, 0, np.inf
-            )
+            stop_loss_penalty = 0
+        low_profit_penalty = -1 * np.dot(
+            np.array(holdings), neg_profit_sell_diff_avg_buy
+        )
+        total_penalty = cash_penalty + stop_loss_penalty + low_profit_penalty
 
-            cash_penalty = max(0, (total_assets * self.cash_penalty_proportion - cash))
-            if self.current_step > 1:
-                prev_holdings = self.state_memory[-2][1 : len(self.assets) + 1]
-                stop_loss_penalty = -1 * np.dot(
-                    np.array(prev_holdings), neg_closing_diff_avg_buy
-                )
-            else:
-                stop_loss_penalty = 0
-            low_profit_penalty = -1 * np.dot(
-                np.array(holdings), neg_profit_sell_diff_avg_buy
-            )
-            total_penalty = cash_penalty + stop_loss_penalty + low_profit_penalty
+        additional_reward = np.dot(np.array(holdings), pos_profit_sell_diff_avg_buy)
 
-            additional_reward = np.dot(np.array(holdings), pos_profit_sell_diff_avg_buy)
+        reward = (
+            (total_assets - total_penalty + additional_reward) / self.initial_amount
+        ) - 1
+        reward /= self.current_step
 
-            reward = (
-                (total_assets - total_penalty + additional_reward) / self.initial_amount
-            ) - 1
-            reward /= self.current_step
-
-            return reward
+        return reward
 
     def step(self, actions):
         # let's just log what we're doing in terms of max actions at each step.
@@ -295,148 +293,145 @@ class StockTradingEnvStopLoss(gym.Env):
         # print if it's time.
         if (self.current_step + 1) % self.print_verbosity == 0:
             self.log_step(reason="update")
-        # if we're at the end
         if self.date_index == len(self.dates) - 1:
             # if we hit the end, set reward to total gains (or losses)
             return self.return_terminal(reward=self.get_reward())
+        # compute value of cash + assets
+        begin_cash = self.state_memory[-1][0]
+        holdings = self.state_memory[-1][1 : len(self.assets) + 1]
+        assert min(holdings) >= 0
+        closings = np.array(self.get_date_vector(self.date_index, cols=["close"]))
+        asset_value = np.dot(holdings, closings)
+        # reward is (cash + assets) - (cash_last_step + assets_last_step)
+        reward = self.get_reward()
+        # log the values of cash, assets, and total assets
+        self.account_information["cash"].append(begin_cash)
+        self.account_information["asset_value"].append(asset_value)
+        self.account_information["total_assets"].append(begin_cash + asset_value)
+        self.account_information["reward"].append(reward)
+
+        # multiply action values by our scalar multiplier and save
+        actions = actions * self.hmax
+        self.actions_memory.append(
+            actions * closings
+        )  # capture what the model's trying to do
+        # buy/sell only if the price is > 0 (no missing data in this particular date)
+        actions = np.where(closings > 0, actions, 0)
+        if (
+            self.turbulence_threshold is not None
+            and self.turbulence >= self.turbulence_threshold
+        ):
+            actions = -(np.array(holdings) * closings)
+            self.log_step(reason="TURBULENCE")
+        # scale cash purchases to asset
+        if self.discrete_actions:
+            # convert into integer because we can't buy fraction of shares
+            actions = np.where(closings > 0, actions // closings, 0)
+            actions = actions.astype(int)
+            # round down actions to the nearest multiplies of shares_increment
+            actions = np.where(
+                actions >= 0,
+                (actions // self.shares_increment) * self.shares_increment,
+                ((actions + self.shares_increment) // self.shares_increment)
+                * self.shares_increment,
+            )
         else:
-            # compute value of cash + assets
-            begin_cash = self.state_memory[-1][0]
-            holdings = self.state_memory[-1][1 : len(self.assets) + 1]
-            assert min(holdings) >= 0
-            closings = np.array(self.get_date_vector(self.date_index, cols=["close"]))
-            asset_value = np.dot(holdings, closings)
-            # reward is (cash + assets) - (cash_last_step + assets_last_step)
-            reward = self.get_reward()
-            # log the values of cash, assets, and total assets
-            self.account_information["cash"].append(begin_cash)
-            self.account_information["asset_value"].append(asset_value)
-            self.account_information["total_assets"].append(begin_cash + asset_value)
-            self.account_information["reward"].append(reward)
+            actions = np.where(closings > 0, actions / closings, 0)
 
-            # multiply action values by our scalar multiplier and save
-            actions = actions * self.hmax
-            self.actions_memory.append(
-                actions * closings
-            )  # capture what the model's trying to do
-            # buy/sell only if the price is > 0 (no missing data in this particular date)
-            actions = np.where(closings > 0, actions, 0)
-            if self.turbulence_threshold is not None:
-                # if turbulence goes over threshold, just clear out all positions
-                if self.turbulence >= self.turbulence_threshold:
-                    actions = -(np.array(holdings) * closings)
-                    self.log_step(reason="TURBULENCE")
-            # scale cash purchases to asset
-            if self.discrete_actions:
-                # convert into integer because we can't buy fraction of shares
-                actions = np.where(closings > 0, actions // closings, 0)
-                actions = actions.astype(int)
-                # round down actions to the nearest multiplies of shares_increment
-                actions = np.where(
-                    actions >= 0,
-                    (actions // self.shares_increment) * self.shares_increment,
-                    ((actions + self.shares_increment) // self.shares_increment)
-                    * self.shares_increment,
-                )
-            else:
-                actions = np.where(closings > 0, actions / closings, 0)
+        # clip actions so we can't sell more assets than we hold
+        actions = np.maximum(actions, -np.array(holdings))
 
-            # clip actions so we can't sell more assets than we hold
-            actions = np.maximum(actions, -np.array(holdings))
-
-            self.closing_diff_avg_buy = closings - (
-                self.stoploss_penalty * self.avg_buy_price
+        self.closing_diff_avg_buy = closings - (
+            self.stoploss_penalty * self.avg_buy_price
+        )
+        if begin_cash >= self.stoploss_penalty * self.initial_amount:
+            # clear out position if stop-loss criteria is met
+            actions = np.where(
+                self.closing_diff_avg_buy < 0, -np.array(holdings), actions
             )
-            if begin_cash >= self.stoploss_penalty * self.initial_amount:
-                # clear out position if stop-loss criteria is met
-                actions = np.where(
-                    self.closing_diff_avg_buy < 0, -np.array(holdings), actions
-                )
 
-                if any(np.clip(self.closing_diff_avg_buy, -np.inf, 0) < 0):
-                    self.log_step(reason="STOP LOSS")
+            if any(np.clip(self.closing_diff_avg_buy, -np.inf, 0) < 0):
+                self.log_step(reason="STOP LOSS")
 
-            # compute our proceeds from sells, and add to cash
-            sells = -np.clip(actions, -np.inf, 0)
-            proceeds = np.dot(sells, closings)
-            costs = proceeds * self.sell_cost_pct
-            coh = begin_cash + proceeds
-            # compute the cost of our buys
-            buys = np.clip(actions, 0, np.inf)
-            spend = np.dot(buys, closings)
-            costs += spend * self.buy_cost_pct
+        # compute our proceeds from sells, and add to cash
+        sells = -np.clip(actions, -np.inf, 0)
+        proceeds = np.dot(sells, closings)
+        costs = proceeds * self.sell_cost_pct
+        coh = begin_cash + proceeds
+        # compute the cost of our buys
+        buys = np.clip(actions, 0, np.inf)
+        spend = np.dot(buys, closings)
+        costs += spend * self.buy_cost_pct
             # if we run out of cash...
-            if (spend + costs) > coh:
-                if self.patient:
-                    # ... just don't buy anything until we got additional cash
-                    self.log_step(reason="CASH SHORTAGE")
-                    actions = np.where(actions > 0, 0, actions)
-                    spend = 0
-                    costs = 0
-                else:
-                    # ... end the cycle and penalize
-                    return self.return_terminal(
-                        reason="CASH SHORTAGE", reward=self.get_reward()
-                    )
+        if (spend + costs) > coh:
+            if not self.patient:
+                # ... end the cycle and penalize
+                return self.return_terminal(
+                    reason="CASH SHORTAGE", reward=self.get_reward()
+                )
 
-            self.transaction_memory.append(actions)  # capture what the model's could do
+            # ... just don't buy anything until we got additional cash
+            self.log_step(reason="CASH SHORTAGE")
+            actions = np.where(actions > 0, 0, actions)
+            spend = 0
+            costs = 0
+        self.transaction_memory.append(actions)  # capture what the model's could do
 
-            # get profitable sell actions
-            sell_closing_price = np.where(
-                sells > 0, closings, 0
-            )  # get closing price of assets that we sold
-            profit_sell = np.where(
-                sell_closing_price - self.avg_buy_price > 0, 1, 0
-            )  # mark the one which is profitable
+        # get profitable sell actions
+        sell_closing_price = np.where(
+            sells > 0, closings, 0
+        )  # get closing price of assets that we sold
+        profit_sell = np.where(
+            sell_closing_price - self.avg_buy_price > 0, 1, 0
+        )  # mark the one which is profitable
 
-            self.profit_sell_diff_avg_buy = np.where(
-                profit_sell == 1,
-                closings - (self.min_profit_penalty * self.avg_buy_price),
-                0,
-            )
+        self.profit_sell_diff_avg_buy = np.where(
+            profit_sell == 1,
+            closings - (self.min_profit_penalty * self.avg_buy_price),
+            0,
+        )
 
-            if any(np.clip(self.profit_sell_diff_avg_buy, -np.inf, 0) < 0):
-                self.log_step(reason="LOW PROFIT")
-            else:
-                if any(np.clip(self.profit_sell_diff_avg_buy, 0, np.inf) > 0):
-                    self.log_step(reason="HIGH PROFIT")
+        if any(np.clip(self.profit_sell_diff_avg_buy, -np.inf, 0) < 0):
+            self.log_step(reason="LOW PROFIT")
+        elif any(np.clip(self.profit_sell_diff_avg_buy, 0, np.inf) > 0):
+            self.log_step(reason="HIGH PROFIT")
 
-            # verify we didn't do anything impossible here
-            assert (spend + costs) <= coh
+        # verify we didn't do anything impossible here
+        assert (spend + costs) <= coh
 
-            # log actual total trades we did up to current step
-            self.actual_num_trades = np.sum(np.abs(np.sign(actions)))
+        # log actual total trades we did up to current step
+        self.actual_num_trades = np.sum(np.abs(np.sign(actions)))
 
-            # update our holdings
-            coh = coh - spend - costs
-            holdings_updated = holdings + actions
+        # update our holdings
+        coh = coh - spend - costs
+        holdings_updated = holdings + actions
 
-            # Update average buy price
-            buys = np.sign(buys)
-            self.n_buys += buys
-            self.avg_buy_price = np.where(
-                buys > 0,
-                self.avg_buy_price + ((closings - self.avg_buy_price) / self.n_buys),
-                self.avg_buy_price,
-            )  # incremental average
+        # Update average buy price
+        buys = np.sign(buys)
+        self.n_buys += buys
+        self.avg_buy_price = np.where(
+            buys > 0,
+            self.avg_buy_price + ((closings - self.avg_buy_price) / self.n_buys),
+            self.avg_buy_price,
+        )  # incremental average
 
-            # set as zero when we don't have any holdings anymore
-            self.n_buys = np.where(holdings_updated > 0, self.n_buys, 0)
-            self.avg_buy_price = np.where(holdings_updated > 0, self.avg_buy_price, 0)
+        # set as zero when we don't have any holdings anymore
+        self.n_buys = np.where(holdings_updated > 0, self.n_buys, 0)
+        self.avg_buy_price = np.where(holdings_updated > 0, self.avg_buy_price, 0)
 
-            self.date_index += 1
-            if self.turbulence_threshold is not None:
-                self.turbulence = self.get_date_vector(
-                    self.date_index, cols=["turbulence"]
-                )[0]
+        self.date_index += 1
+        if self.turbulence_threshold is not None:
+            self.turbulence = self.get_date_vector(
+                self.date_index, cols=["turbulence"]
+            )[0]
 
-            # Update State
-            state = (
-                [coh] + list(holdings_updated) + self.get_date_vector(self.date_index)
-            )
-            self.state_memory.append(state)
+        # Update State
+        state = (
+            [coh] + list(holdings_updated) + self.get_date_vector(self.date_index)
+        )
+        self.state_memory.append(state)
 
-            return state, reward, False, {}
+        return state, reward, False, {}
 
     def get_sb_env(self):
         def get_self():
@@ -457,11 +452,10 @@ class StockTradingEnvStopLoss(gym.Env):
     def save_asset_memory(self):
         if self.current_step == 0:
             return None
-        else:
-            self.account_information["date"] = self.dates[
-                -len(self.account_information["cash"]) :
-            ]
-            return pd.DataFrame(self.account_information)
+        self.account_information["date"] = self.dates[
+            -len(self.account_information["cash"]) :
+        ]
+        return pd.DataFrame(self.account_information)
 
     def save_action_memory(self):
         if self.current_step == 0:

@@ -120,7 +120,7 @@ class TestStocktradingEnvCashpenalty(unittest.TestCase):
         )
         _ = env_uncached.reset()
         _ = env_cached.reset()
-        for i in range(10):
+        for _ in range(10):
             actions = np.random.uniform(low=-1, high=1, size=2)
             print(f"actions: {actions}")
             un_state, un_reward, _, _ = env_uncached.step(actions)

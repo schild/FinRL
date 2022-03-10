@@ -10,8 +10,7 @@ class QuantConnectEngineer:
         qb = QuantBook()
         for stock in stock_list:
             qb.AddEquity(stock)
-        history = qb.History(qb.Securities.Keys, start_time, end_time, resolution)
-        return history
+        return qb.History(qb.Securities.Keys, start_time, end_time, resolution)
 
     def preprocess(df, stock_list):
         df = df[["open", "high", "low", "close", "volume"]]

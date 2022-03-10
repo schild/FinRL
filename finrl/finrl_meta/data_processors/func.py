@@ -31,11 +31,11 @@ def calc_stocknames(path):
 def remove_all_files(remove, path_of_data):
     assert remove in [0, 1]
     if remove == 1:
-        os.system("rm -f " + path_of_data + "/*")
+        os.system(f"rm -f {path_of_data}/*")
     dir_list = os.listdir(path_of_data)
     for file in dir_list:
         if "~" in file:
-            os.system("rm -f " + path_of_data + "/" + file)
+            os.system(f"rm -f {path_of_data}/{file}")
     dir_list = os.listdir(path_of_data)
 
     if remove == 1:

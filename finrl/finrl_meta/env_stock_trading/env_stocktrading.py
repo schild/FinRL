@@ -89,33 +89,29 @@ class StockTradingEnv(gym.Env):
 
     def _sell_stock(self, index, action):
         def _do_sell_normal():
-            if self.state[index + 2*self.stock_dim + 1]!=True : # check if the stock is able to sell, for simlicity we just add it in techical index
-            # if self.state[index + 1] > 0: # if we use price<0 to denote a stock is unable to trade in that day, the total asset calculation may be wrong for the price is unreasonable
-                # Sell only if the price is > 0 (no missing data in this particular date)
-                # perform sell action based on the sign of the action
-                if self.state[index + self.stock_dim + 1] > 0:
-                    # Sell only if current asset is > 0
-                    sell_num_shares = min(
-                        abs(action), self.state[index + self.stock_dim + 1]
-                    )
-                    sell_amount = (
-                        self.state[index + 1]
-                        * sell_num_shares
-                        * (1 - self.sell_cost_pct[index])
-                    )
-                    # update balance
-                    self.state[0] += sell_amount
-
-                    self.state[index + self.stock_dim + 1] -= sell_num_shares
-                    self.cost += (
-                        self.state[index + 1] * sell_num_shares * self.sell_cost_pct[index]
-                    )
-                    self.trades += 1
-                else:
-                    sell_num_shares = 0
-            else:
+            if self.state[index + 2 * self.stock_dim + 1] == True:
                 sell_num_shares = 0
 
+            elif self.state[index + self.stock_dim + 1] > 0:
+                # Sell only if current asset is > 0
+                sell_num_shares = min(
+                    abs(action), self.state[index + self.stock_dim + 1]
+                )
+                sell_amount = (
+                    self.state[index + 1]
+                    * sell_num_shares
+                    * (1 - self.sell_cost_pct[index])
+                )
+                # update balance
+                self.state[0] += sell_amount
+
+                self.state[index + self.stock_dim + 1] -= sell_num_shares
+                self.cost += (
+                    self.state[index + 1] * sell_num_shares * self.sell_cost_pct[index]
+                )
+                self.trades += 1
+            else:
+                sell_num_shares = 0
             return sell_num_shares
 
         # perform sell action based on the sign of the action
@@ -279,9 +275,11 @@ class StockTradingEnv(gym.Env):
             actions = actions.astype(
                 int
             )  # convert into integer because we can't by fraction of shares
-            if self.turbulence_threshold is not None:
-                if self.turbulence >= self.turbulence_threshold:
-                    actions = np.array([-self.hmax] * self.stock_dim)
+            if (
+                self.turbulence_threshold is not None
+                and self.turbulence >= self.turbulence_threshold
+            ):
+                actions = np.array([-self.hmax] * self.stock_dim)
             begin_total_asset = self.state[0] + sum(
                 np.array(self.state[1 : (self.stock_dim + 1)])
                 * np.array(self.state[(self.stock_dim + 1) : (self.stock_dim * 2 + 1)])
@@ -364,91 +362,85 @@ class StockTradingEnv(gym.Env):
     def _initiate_state(self):
         if self.initial:
             # For Initial State
-            if len(self.df.tic.unique()) > 1:
-                # for multiple stock
-                state = (
+            return (
+                (
                     [self.initial_amount]
                     + self.data.close.values.tolist()
                     + self.initial_list[1:]
                     + sum(
-                        [
+                        (
                             self.data[tech].values.tolist()
                             for tech in self.tech_indicator_list
-                        ],
+                        ),
                         [],
                     )
-                ) # append initial stocks_share to initial state, instead of all zero 
-            else:
-                # for single stock
-                state = (
+                )
+                if len(self.df.tic.unique()) > 1
+                else (
                     [self.initial_amount]
                     + [self.data.close]
                     + [0] * self.stock_dim
-                    + sum([[self.data[tech]] for tech in self.tech_indicator_list], [])
-                )
-        else:
-            # Using Previous State
-            if len(self.df.tic.unique()) > 1:
-                # for multiple stock
-                state = (
-                    [self.previous_state[0]]
-                    + self.data.close.values.tolist()
-                    + self.previous_state[
-                        (self.stock_dim + 1) : (self.stock_dim * 2 + 1)
-                    ]
                     + sum(
-                        [
-                            self.data[tech].values.tolist()
-                            for tech in self.tech_indicator_list
-                        ],
+                        ([self.data[tech]] for tech in self.tech_indicator_list),
                         [],
                     )
                 )
-            else:
-                # for single stock
-                state = (
-                    [self.previous_state[0]]
-                    + [self.data.close]
-                    + self.previous_state[
-                        (self.stock_dim + 1) : (self.stock_dim * 2 + 1)
-                    ]
-                    + sum([[self.data[tech]] for tech in self.tech_indicator_list], [])
-                )
-        return state
+            )
 
-    def _update_state(self):
-        if len(self.df.tic.unique()) > 1:
-            # for multiple stock
-            state = (
-                [self.state[0]]
+        elif len(self.df.tic.unique()) > 1:
+                # for multiple stock
+            return (
+                [self.previous_state[0]]
                 + self.data.close.values.tolist()
-                + list(self.state[(self.stock_dim + 1) : (self.stock_dim * 2 + 1)])
+                + self.previous_state[
+                    (self.stock_dim + 1) : (self.stock_dim * 2 + 1)
+                ]
                 + sum(
-                    [
+                    (
                         self.data[tech].values.tolist()
                         for tech in self.tech_indicator_list
-                    ],
+                    ),
                     [],
                 )
             )
 
         else:
-            # for single stock
-            state = (
+                # for single stock
+            return ([self.previous_state[0]]
+                    + [self.data.close]
+                    + self.previous_state[
+                        (self.stock_dim + 1) : (self.stock_dim * 2 + 1)
+                    ] + sum(([self.data[tech]] for tech in self.tech_indicator_list), []))
+
+    def _update_state(self):
+        return (
+            (
+                [self.state[0]]
+                + self.data.close.values.tolist()
+                + list(self.state[(self.stock_dim + 1) : (self.stock_dim * 2 + 1)])
+                + sum(
+                    (
+                        self.data[tech].values.tolist()
+                        for tech in self.tech_indicator_list
+                    ),
+                    [],
+                )
+            )
+            if len(self.df.tic.unique()) > 1
+            else (
                 [self.state[0]]
                 + [self.data.close]
                 + list(self.state[(self.stock_dim + 1) : (self.stock_dim * 2 + 1)])
-                + sum([[self.data[tech]] for tech in self.tech_indicator_list], [])
+                + sum(([self.data[tech]] for tech in self.tech_indicator_list), [])
             )
-
-        return state
+        )
 
     def _get_date(self):
-        if len(self.df.tic.unique()) > 1:
-            date = self.data.date.unique()[0]
-        else:
-            date = self.data.date
-        return date
+        return (
+            self.data.date.unique()[0]
+            if len(self.df.tic.unique()) > 1
+            else self.data.date
+        )
 
     # add save_state_memory to preserve state in the trading process 
     def save_state_memory(self):
@@ -472,12 +464,9 @@ class StockTradingEnv(gym.Env):
     def save_asset_memory(self):
         date_list = self.date_memory
         asset_list = self.asset_memory
-        # print(len(date_list))
-        # print(len(asset_list))
-        df_account_value = pd.DataFrame(
+        return pd.DataFrame(
             {"date": date_list, "account_value": asset_list}
         )
-        return df_account_value
 
     def save_action_memory(self):
         if len(self.df.tic.unique()) > 1:

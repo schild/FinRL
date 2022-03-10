@@ -223,18 +223,14 @@ class StockPortfolioEnv(gym.Env):
     def softmax_normalization(self, actions):
         numerator = np.exp(actions)
         denominator = np.sum(np.exp(actions))
-        softmax_output = numerator / denominator
-        return softmax_output
+        return numerator / denominator
 
     def save_asset_memory(self):
         date_list = self.date_memory
         portfolio_return = self.portfolio_return_memory
-        # print(len(date_list))
-        # print(len(asset_list))
-        df_account_value = pd.DataFrame(
+        return pd.DataFrame(
             {"date": date_list, "daily_return": portfolio_return}
         )
-        return df_account_value
 
     def save_action_memory(self):
         # date and close price length must match actions length

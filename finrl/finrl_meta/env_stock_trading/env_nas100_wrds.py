@@ -32,7 +32,7 @@ class StockEnvNAS100:
         if_trade=False,
     ):
         self.min_stock_rate = min_stock_rate
-        beg_i, mid_i, end_i = 0, int(211210), int(422420)
+        beg_i, mid_i, end_i = 0, 211210, 422420
 
         (i0, i1) = (beg_i, mid_i) if if_eval else (mid_i, end_i)
         data_arrays = (
@@ -40,12 +40,12 @@ class StockEnvNAS100:
             tech_ary,
             turbulence_ary,
         )
-        if not if_trade:
-            data_arrays = [ary[i0:i1:data_gap] for ary in data_arrays]
-        else:
-            data_arrays = [
-                ary[int(422420) : int(528026) : data_gap] for ary in data_arrays
-            ]
+        data_arrays = (
+            [ary[422420:528026:data_gap] for ary in data_arrays]
+            if if_trade
+            else [ary[i0:i1:data_gap] for ary in data_arrays]
+        )
+
         self.price_ary, self.tech_ary, turbulence_ary = data_arrays
 
         self.tech_ary = self.tech_ary * 2 ** -7
@@ -198,9 +198,9 @@ class StockEnvNAS100:
         device = agent.device
 
         state = self.reset()
-        episode_returns = list()  # the cumulative_return / initial_account
+        episode_returns = []
         with _torch.no_grad():
-            for i in range(self.max_step):
+            for _ in range(self.max_step):
                 s_tensor = _torch.as_tensor((state,), device=device)
                 a_tensor = act(s_tensor)  # action_tanh = act.forward()
                 action = (
